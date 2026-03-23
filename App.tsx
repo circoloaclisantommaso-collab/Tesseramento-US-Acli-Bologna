@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Settings } from 'lucide-react';
+import { Settings, BookOpen } from 'lucide-react';
 import { Tesserato, TesseratoField } from './types';
 import { DEFAULT_TESSERATO } from './constants';
 import { TesseratoForm } from './components/TesseratoForm';
@@ -7,6 +7,7 @@ import useLocalStorage from './hooks/useLocalStorage';
 import { importTesseratiFromFile } from './utils/fileImporter';
 import { exportToCsv } from './utils/csvExporter';
 import { AISettingsModal, AISettings, DEFAULT_AI_SETTINGS } from './components/AISettingsModal';
+import { UserManualModal } from './components/UserManualModal';
 
 function App() {
     const [tesserati, setTesserati] = useLocalStorage<Tesserato[]>('tesserati', [{...DEFAULT_TESSERATO, id: Date.now() + Math.random()}]);
@@ -15,6 +16,7 @@ function App() {
 
     const [isConfirmingReset, setIsConfirmingReset] = useState(false);
     const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
+    const [isManualOpen, setIsManualOpen] = useState(false);
     const [aiSettings, setAiSettings] = useLocalStorage<AISettings>('ai_settings', DEFAULT_AI_SETTINGS);
 
     useEffect(() => {
@@ -188,7 +190,16 @@ function App() {
             <header className="bg-white shadow-md">
                 <div className="container mx-auto px-4 py-4 flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold text-blue-800">Tesseramento Us-Acli Bologna</h1>
+                        <h1 className="text-3xl font-bold text-blue-800 flex items-center gap-3">
+                            Tesseramento Us-Acli Bologna
+                            <button 
+                                onClick={() => setIsManualOpen(true)}
+                                className="text-blue-500 hover:text-blue-700 transition-colors bg-blue-50 p-1.5 rounded-full"
+                                title="Manuale Utente"
+                            >
+                                <BookOpen className="w-6 h-6" />
+                            </button>
+                        </h1>
                         <p className="text-sm text-gray-500">By F. Manfredi</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -283,6 +294,11 @@ function App() {
                 onClose={() => setIsAISettingsOpen(false)} 
                 settings={aiSettings} 
                 onSave={setAiSettings} 
+            />
+            
+            <UserManualModal 
+                isOpen={isManualOpen} 
+                onClose={() => setIsManualOpen(false)} 
             />
         </div>
     );
