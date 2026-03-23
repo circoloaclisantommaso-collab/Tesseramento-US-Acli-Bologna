@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Settings } from 'lucide-react';
 import { Tesserato, TesseratoField } from './types';
 import { DEFAULT_TESSERATO } from './constants';
@@ -16,6 +16,27 @@ function App() {
     const [isConfirmingReset, setIsConfirmingReset] = useState(false);
     const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
     const [aiSettings, setAiSettings] = useLocalStorage<AISettings>('ai_settings', DEFAULT_AI_SETTINGS);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            e.preventDefault();
+            e.returnValue = ''; // Mostra il prompt di conferma del browser
+        };
+
+        const handleUnload = () => {
+            // Svuota i campi e rimuove le chiavi API quando l'utente conferma l'uscita
+            localStorage.removeItem('tesserati');
+            localStorage.removeItem('ai_settings');
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('unload', handleUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('unload', handleUnload);
+        };
+    }, []);
 
     const handleAddTesserato = () => {
         const newTesserato = { ...DEFAULT_TESSERATO, id: Date.now() + Math.random() };
