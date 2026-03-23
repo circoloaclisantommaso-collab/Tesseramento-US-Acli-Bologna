@@ -15,7 +15,7 @@ import {
 } from '../constants';
 import { DISCIPLINES } from '../discipline';
 import { validateCodiceFiscale } from '../utils/validation';
-import { parseCodiceFiscale } from '../utils/codiceFiscaleParser';
+import { parseCodiceFiscale, generateCodiceFiscale } from '../utils/codiceFiscaleParser';
 import { COMUNI_E_CAP } from '../comuniECap';
 
 
@@ -79,8 +79,6 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
             setIsParsingCf(false);
         }
     };
-    
-    const shouldDisableCfDerivedFields = isCfValid && !!tesserato.codiceFiscale;
 
     // Advanced logic for Residenza fields validation and manual mode
     const comuneOptions = useMemo(() => 
@@ -178,6 +176,16 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
         setManualTipoTesseramento(isTogglingToManual);
         handleChange('tipoTesseramento', []);
     };
+
+    // Auto-generate Codice Fiscale
+    useEffect(() => {
+        if (!tesserato.codiceFiscale && tesserato.nome && tesserato.cognome && tesserato.sesso && tesserato.dataNascita && tesserato.comuneNascita) {
+            const generatedCf = generateCodiceFiscale(tesserato);
+            if (generatedCf) {
+                handleChange('codiceFiscale', generatedCf);
+            }
+        }
+    }, [tesserato.nome, tesserato.cognome, tesserato.sesso, tesserato.dataNascita, tesserato.comuneNascita, tesserato.nazioneNascita, tesserato.codiceFiscale]);
 
 
     return (
@@ -327,6 +335,23 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                 required 
                                 error={!tesserato.codiceFiscale.trim() ? 'Campo obbligatorio' : !isCfValid ? "Formato non valido" : undefined}
                                 info={isParsingCf ? "Analisi del codice fiscale..." : undefined}
+                                actionButton={
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const generatedCf = generateCodiceFiscale(tesserato);
+                                            if (generatedCf) {
+                                                handleChange('codiceFiscale', generatedCf);
+                                            } else {
+                                                alert("Impossibile calcolare il Codice Fiscale. Assicurati di aver inserito Nome, Cognome, Sesso, Data e Comune di Nascita.");
+                                            }
+                                        }}
+                                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm font-medium whitespace-nowrap"
+                                        title="Calcola Codice Fiscale dai dati anagrafici"
+                                    >
+                                        Calcola
+                                    </button>
+                                }
                             />
                             <Select 
                                 label="Sesso" 
@@ -334,27 +359,23 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                 onChange={e => handleChange('sesso', e.target.value)} 
                                 options={SESSO_OPTIONS} 
                                 required 
-                                disabled={shouldDisableCfDerivedFields}
                             />
                             <DateInput 
                                 label="Data di Nascita" 
                                 value={tesserato.dataNascita} 
                                 onChange={e => handleChange('dataNascita', e.target.value)} 
                                 required 
-                                disabled={shouldDisableCfDerivedFields}
                             />
                             <Input 
                                 label="Comune di Nascita" 
                                 value={tesserato.comuneNascita} 
                                 onChange={e => handleChange('comuneNascita', e.target.value)} 
                                 required 
-                                disabled={shouldDisableCfDerivedFields}
                             />
                             <Input 
                                 label="Nazione di Nascita" 
                                 value={tesserato.nazioneNascita} 
                                 onChange={e => handleChange('nazioneNascita', e.target.value)} 
-                                disabled={shouldDisableCfDerivedFields}
                             />
                             <Input label="Nazione Cittadinanza" value={tesserato.nazioneCittadinanza} onChange={e => handleChange('nazioneCittadinanza', e.target.value)} />
                         </div>

@@ -9,19 +9,23 @@ interface BaseInputProps {
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement>, BaseInputProps {
     info?: string;
+    actionButton?: React.ReactNode;
 }
 
-export const Input: React.FC<InputProps> = ({ label, required, className, error, info, ...props }) => {
+export const Input: React.FC<InputProps> = ({ label, required, className, error, info, actionButton, ...props }) => {
     const errorClasses = error ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
     return (
         <div className={className}>
             <label className="block text-sm font-medium text-gray-700 mb-1">
                 {label} {required && <span className="text-red-500">*</span>}
             </label>
-            <input
-                {...props}
-                className={`block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none sm:text-sm ${errorClasses}`}
-            />
+            <div className="flex gap-2">
+                <input
+                    {...props}
+                    className={`block w-full px-3 py-2 border rounded-md shadow-sm placeholder-gray-400 focus:outline-none sm:text-sm ${errorClasses}`}
+                />
+                {actionButton}
+            </div>
              {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
              {info && !error && <p className="mt-1 text-xs text-blue-600">{info}</p>}
         </div>

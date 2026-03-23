@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
     "@google/genai": "^1.46.0",
+    "codice-fiscale-js": "^2.3.23",
     "lucide-react": "^1.0.1",
     "openai": "^6.32.0",
     "react": "^19.1.1",

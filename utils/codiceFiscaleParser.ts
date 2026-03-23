@@ -1,4 +1,5 @@
-import { Sesso } from '../types';
+import { Sesso, Tesserato } from '../types';
+import CodiceFiscale from 'codice-fiscale-js';
 
 let COMUNI: { nome: string; codice: string }[] = [];
 let STATI_ESTERI: { nome: string; codice: string }[] = [];
@@ -70,6 +71,33 @@ export const parseCodiceFiscale = async (cf: string): Promise<{ dataNascita: str
         return { dataNascita, sesso, ...luogo, };
     } catch (error) {
         console.error("Error parsing codice fiscale:", error);
+        return null;
+    }
+};
+
+export const generateCodiceFiscale = (tesserato: Partial<Tesserato>): string | null => {
+    try {
+        if (!tesserato.nome || !tesserato.cognome || !tesserato.sesso || !tesserato.dataNascita || !tesserato.comuneNascita) {
+            return null;
+        }
+
+        const [year, month, day] = tesserato.dataNascita.split('-').map(Number);
+        if (!year || !month || !day) return null;
+
+        const cf = new CodiceFiscale({
+            name: tesserato.nome,
+            surname: tesserato.cognome,
+            gender: tesserato.sesso,
+            day: day,
+            month: month,
+            year: year,
+            birthplace: tesserato.nazioneNascita && tesserato.nazioneNascita !== 'Italia' ? tesserato.nazioneNascita : tesserato.comuneNascita,
+            birthplaceProvincia: tesserato.nazioneNascita && tesserato.nazioneNascita !== 'Italia' ? 'EE' : undefined
+        });
+
+        return cf.code;
+    } catch (e) {
+        // Silently fail if data is incomplete or birthplace is not found
         return null;
     }
 };
