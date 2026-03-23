@@ -1,0 +1,287 @@
+import { Tesserato, Sesso } from '../types';
+import { DEFAULT_TESSERATO, getTodayDate } from '../constants';
+import { COMUNI_E_CAP } from '../comuniECap';
+
+// These will be global variables from the script tags in index.html
+declare var Papa: any;
+declare var XLSX: any;
+
+// A map from possible header names to Tesserato keys.
+// Keys are lowercased for case-insensitive matching to support variations.
+const HEADER_MAP: { [key: string]: keyof Tesserato } = {
+    // Variations for 'classeTesseramento'
+    'classe tesseramento': 'classeTesseramento',
+    'classe': 'classeTesseramento',
+
+    // Variations for 'tipoTesseramento'
+    'tipo tesseramento': 'tipoTesseramento',
+    'tipo': 'tipoTesseramento',
+
+    // Variations for 'dataInizio'
+    'data inizio': 'dataInizio',
+    'inizio validità': 'dataInizio',
+
+    // Variations for 'dataFine'
+    'data fine': 'dataFine',
+    'scadenza': 'dataFine',
+    'fine validità': 'dataFine',
+    
+    // Variations for 'discipline'
+    'discipline': 'discipline',
+    'disciplina': 'discipline',
+    
+    // Variations for 'nazioneCittadinanza'
+    'nazione cittadinanza': 'nazioneCittadinanza',
+    'cittadinanza': 'nazioneCittadinanza',
+    
+    // Variations for 'codiceFiscale'
+    'codice fiscale': 'codiceFiscale',
+    'cf': 'codiceFiscale',
+    
+    'cognome': 'cognome',
+    'nome': 'nome',
+    
+    // Variations for 'dataNascita'
+    'data di nascita': 'dataNascita',
+    'data nascita': 'dataNascita',
+    'nato il': 'dataNascita',
+
+    // Variations for 'sesso'
+    'sesso': 'sesso',
+    'genere': 'sesso',
+    
+    // Variations for 'nazioneNascita'
+    'nazione nascita': 'nazioneNascita',
+    'nazione di nascita': 'nazioneNascita',
+    
+    // Variations for 'comuneNascita'
+    'comune di nascita': 'comuneNascita',
+    'comune nascita': 'comuneNascita',
+    'luogo di nascita': 'comuneNascita',
+    'luogo nascita': 'comuneNascita',
+
+    // Variations for 'indirizzoResidenza'
+    'indirizzo residenza': 'indirizzoResidenza',
+    'indirizzo': 'indirizzoResidenza',
+
+    // Variations for 'capResidenza'
+    'cap residenza': 'capResidenza',
+    'cap': 'capResidenza',
+    
+    // Variations for 'comuneResidenza'
+    'comune di residenza': 'comuneResidenza',
+    'comune residenza': 'comuneResidenza',
+    'città residenza': 'comuneResidenza',
+    'città': 'comuneResidenza',
+    
+    'marketing usacli': 'marketingUsa',
+    'marketing partners usacli': 'marketingPartners',
+    'profilazione usacli': 'profilazioneUsa',
+    'profilazione partners usacli': 'profilazionePartners',
+    
+    // Variations for 'disabilita'
+    'disabilità': 'disabilita',
+    'disabilita': 'disabilita',
+};
+
+
+// Pre-compute map from CAP to comuni for efficient lookup
+const capToComuniMap = new Map<string, string[]>();
+COMUNI_E_CAP.forEach(comune => {
+    comune.cap.forEach(cap => {
+        if (!capToComuniMap.has(cap)) {
+            capToComuniMap.set(cap, []);
+        }
+        capToComuniMap.get(cap)!.push(comune.nome);
+    });
+});
+
+const normalizeHeader = (header: string) => header.toLowerCase().trim();
+
+const parseItalianDate = (dateStr: string): string => {
+    if (!dateStr || typeof dateStr !== 'string') return '';
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+        const [day, month, year] = parts;
+        if (day?.length <= 2 && month?.length <= 2 && year?.length === 4) {
+             return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+    }
+    // Handle ISO format as well
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
+    }
+    return '';
+};
+
+// FIX: Made the function more robust to handle string representations of booleans like "TRUE" or "FALSE".
+// Changed parameter type to 'any' to robustly handle various input types from file parsers (e.g., number, string, boolean).
+const parsePrivacy = (value: any): boolean | null => {
+    if (typeof value === 'boolean' || value === null) return value;
+    const upperVal = String(value).trim().toUpperCase();
+    if (upperVal === 'S' || upperVal === 'TRUE') return true;
+    if (upperVal === 'N' || upperVal === 'FALSE') return false;
+    return null;
+};
+
+const processRow = (rawRow: any, headerMapping: { [key: string]: keyof Tesserato }): Partial<Tesserato> => {
+    const tesserato: Partial<Tesserato> = {};
+    for (const rawHeader in rawRow) {
+        const normalizedHeader = normalizeHeader(rawHeader);
+        const tesseratoField = headerMapping[normalizedHeader];
+        if (tesseratoField) {
+            let value = rawRow[rawHeader];
+            
+            switch (tesseratoField) {
+                case 'dataInizio':
+                case 'dataFine':
+                case 'dataNascita':
+                    value = parseItalianDate(value);
+                    break;
+                case 'marketingUsa':
+                case 'marketingPartners':
+                case 'profilazioneUsa':
+                case 'profilazionePartners':
+                    value = parsePrivacy(value);
+                    break;
+                case 'tipoTesseramento':
+                case 'discipline':
+                case 'disabilita':
+                    value = typeof value === 'string' ? value.split('|').map(s => s.trim()).filter(Boolean) : [];
+                    break;
+                case 'codiceFiscale':
+                    value = typeof value === 'string' ? value.toUpperCase() : '';
+                    break;
+                case 'sesso':
+                     // FIX: Refactored sesso parsing to be more robust.
+                     const s = String(value ?? '').toUpperCase();
+                     value = s === 'M' ? Sesso.M : s === 'F' ? Sesso.F : '';
+                     break;
+                default:
+                    // FIX: Ensure all other fields are converted to string to avoid type mismatches
+                    // when a cell contains a boolean or number by mistake.
+                    value = String(value ?? '');
+            }
+            (tesserato as any)[tesseratoField] = value;
+        }
+    }
+    return tesserato;
+};
+
+export const parseCsv = (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: any) => {
+                if (results.errors && results.errors.length) {
+                    reject(new Error('Errore durante il parsing del CSV: ' + results.errors[0].message));
+                } else {
+                    resolve(results.data);
+                }
+            },
+            error: (error: any) => {
+                reject(new Error('Errore nel file CSV: ' + error.message));
+            }
+        });
+    });
+};
+
+export const parseXlsx = (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                resolve(json);
+            } catch (err: any) {
+                reject(new Error('Errore durante la lettura del file Excel: ' + err.message));
+            }
+        };
+        reader.onerror = (error) => reject(error);
+        reader.readAsArrayBuffer(file);
+    });
+};
+
+export const importTesseratiFromFile = async (file: File): Promise<Tesserato[]> => {
+    let rawData: any[];
+    const lowerCaseFileName = file.name.toLowerCase();
+
+    if (lowerCaseFileName.endsWith('.csv')) {
+        rawData = await parseCsv(file);
+    } else if (lowerCaseFileName.endsWith('.xlsx') || lowerCaseFileName.endsWith('.xls')) {
+        rawData = await parseXlsx(file);
+    } else {
+        throw new Error('Formato file non supportato. Usare .csv o .xlsx');
+    }
+
+    if (!rawData || rawData.length === 0) {
+        return [];
+    }
+
+    const firstRow = rawData[0];
+    const detectedHeaderMapping: { [key: string]: keyof Tesserato } = {};
+    for (const rawHeader in firstRow) {
+        const normalized = normalizeHeader(rawHeader);
+        if (HEADER_MAP[normalized]) {
+            detectedHeaderMapping[normalized] = HEADER_MAP[normalized];
+        }
+    }
+    
+    if (Object.keys(detectedHeaderMapping).length === 0) {
+        throw new Error("Intestazioni di colonna non riconosciute. Assicurarsi che il file contenga intestazioni come 'Codice Fiscale', 'Nome', 'Cognome', ecc.");
+    }
+
+    const importedTesserati = rawData
+        .map(row => {
+            const processedData = processRow(row, detectedHeaderMapping);
+            if (!processedData.codiceFiscale && !processedData.nome && !processedData.cognome) {
+                return null; // Skip empty rows
+            }
+            
+            const capFromFile = String(processedData.capResidenza || '').trim();
+            const comuneFromFile = String(processedData.comuneResidenza || '').trim();
+
+            let finalCap = capFromFile;
+            let finalComune = comuneFromFile;
+
+            if (capFromFile) {
+                // Priority to CAP: If a CAP exists in the file, use it to find the definitive comune.
+                const possibleComuni = capToComuniMap.get(capFromFile);
+                if (possibleComuni && possibleComuni.length === 1) {
+                    finalComune = possibleComuni[0];
+                }
+            } else if (comuneFromFile) {
+                // No CAP in file: If a comune exists, use it to find the CAP.
+                const comuneData = COMUNI_E_CAP.find(c => c.nome.toUpperCase() === comuneFromFile.toUpperCase());
+                if (comuneData && comuneData.cap.length === 1) {
+                    finalCap = comuneData.cap[0];
+                }
+            }
+            
+            return {
+                ...DEFAULT_TESSERATO,
+                ...processedData,
+                dataInizio: processedData.dataInizio || getTodayDate(),
+                capResidenza: finalCap,
+                comuneResidenza: finalComune,
+                nazioneCittadinanza: processedData.nazioneCittadinanza || 'ITALIA',
+                // Default all privacy settings to true on import
+                marketingUsa: true,
+                marketingPartners: true,
+                profilazioneUsa: true,
+                profilazionePartners: true,
+                id: Date.now() + Math.random(),
+            // FIX: Cast the created object to Tesserato to satisfy the type predicate in the filter below.
+            // The created object is compatible with Tesserato, but its inferred type has a required `id`
+            // while `Tesserato` has an optional `id`, causing a type mismatch for the predicate.
+            } as Tesserato;
+        })
+        .filter((t): t is Tesserato => t !== null);
+
+    return importedTesserati;
+};
