@@ -6,8 +6,11 @@ import { TesseratoForm } from './components/TesseratoForm';
 import useLocalStorage from './hooks/useLocalStorage';
 import { importTesseratiFromFile } from './utils/fileImporter';
 import { exportToCsv } from './utils/csvExporter';
+import { enrichTesseratiData } from './utils/codiceFiscaleParser';
 import { AISettingsModal, AISettings, DEFAULT_AI_SETTINGS } from './components/AISettingsModal';
 import { UserManualModal } from './components/UserManualModal';
+import { ExportValidationModal } from './components/ExportValidationModal';
+import { validateTesseratiForExport, ValidationError } from './utils/validation';
 
 function App() {
     const [tesserati, setTesserati] = useLocalStorage<Tesserato[]>('tesserati', [{...DEFAULT_TESSERATO, id: Date.now() + Math.random()}]);
@@ -17,6 +20,8 @@ function App() {
     const [isConfirmingReset, setIsConfirmingReset] = useState(false);
     const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
     const [isManualOpen, setIsManualOpen] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [exportErrors, setExportErrors] = useState<ValidationError[]>([]);
     const [aiSettings, setAiSettings] = useLocalStorage<AISettings>('ai_settings', DEFAULT_AI_SETTINGS);
 
     useEffect(() => {
@@ -121,7 +126,8 @@ function App() {
             try {
                 const imported = await importTesseratiFromFile(file);
                 if (imported.length > 0) {
-                     setTesserati(imported);
+                     const enriched = await enrichTesseratiData(imported);
+                     setTesserati(enriched);
                      setExpandedIndex(0);
                 } else {
                     alert('Nessun dato valido trovato nel file.');
@@ -152,7 +158,8 @@ function App() {
                 const { importTesseratiWithAI } = await import('./utils/aiImporter');
                 const imported = await importTesseratiWithAI(file, aiSettings);
                 if (imported.length > 0) {
-                     setTesserati(imported);
+                     const enriched = await enrichTesseratiData(imported);
+                     setTesserati(enriched);
                      setExpandedIndex(0);
                      alert(`Importati ${imported.length} tesserati con successo tramite AI.`);
                 } else {
@@ -182,7 +189,27 @@ function App() {
             alert('Nessun tesserato da esportare.');
             return;
         }
+        
+        const errors = validateTesseratiForExport(tesserati);
+        if (errors.length > 0) {
+            setExportErrors(errors);
+            setIsExportModalOpen(true);
+        } else {
+            exportToCsv(tesserati, 'tesserati.csv');
+        }
+    };
+
+    const handleProceedExport = () => {
+        setIsExportModalOpen(false);
         exportToCsv(tesserati, 'tesserati.csv');
+    };
+
+    const handleFixErrors = (index: number) => {
+        setIsExportModalOpen(false);
+        setExpandedIndex(index);
+        setTimeout(() => {
+            document.getElementById(`tesserato-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
     };
 
     return (
@@ -266,17 +293,18 @@ function App() {
             <main className="container mx-auto p-4 md:p-8">
                 <div className="space-y-6">
                     {tesserati.map((tesserato, index) => (
-                        <TesseratoForm
-                            key={tesserato.id || index}
-                            tesserato={tesserato}
-                            index={index}
-                            onUpdate={handleUpdateTesserato}
-                            onBulkUpdate={handleBulkUpdateTesserato}
-                            onRemove={handleRemoveTesserato}
-                            total={tesserati.length}
-                            isExpanded={expandedIndex === index}
-                            onHeaderClick={() => handleHeaderClick(index)}
-                        />
+                        <div key={tesserato.id || index} id={`tesserato-${index}`}>
+                            <TesseratoForm
+                                tesserato={tesserato}
+                                index={index}
+                                onUpdate={handleUpdateTesserato}
+                                onBulkUpdate={handleBulkUpdateTesserato}
+                                onRemove={handleRemoveTesserato}
+                                total={tesserati.length}
+                                isExpanded={expandedIndex === index}
+                                onHeaderClick={() => handleHeaderClick(index)}
+                            />
+                        </div>
                     ))}
                 </div>
                 <div className="mt-8 text-center">
@@ -299,6 +327,14 @@ function App() {
             <UserManualModal 
                 isOpen={isManualOpen} 
                 onClose={() => setIsManualOpen(false)} 
+            />
+
+            <ExportValidationModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                onProceed={handleProceedExport}
+                onFix={handleFixErrors}
+                errors={exportErrors}
             />
         </div>
     );

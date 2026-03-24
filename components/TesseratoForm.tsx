@@ -336,21 +336,49 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                 error={!tesserato.codiceFiscale.trim() ? 'Campo obbligatorio' : !isCfValid ? "Formato non valido" : undefined}
                                 info={isParsingCf ? "Analisi del codice fiscale..." : undefined}
                                 actionButton={
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            const generatedCf = generateCodiceFiscale(tesserato);
-                                            if (generatedCf) {
-                                                handleChange('codiceFiscale', generatedCf);
-                                            } else {
-                                                alert("Impossibile calcolare il Codice Fiscale. Assicurati di aver inserito Nome, Cognome, Sesso, Data e Comune di Nascita.");
-                                            }
-                                        }}
-                                        className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm font-medium whitespace-nowrap"
-                                        title="Calcola Codice Fiscale dai dati anagrafici"
-                                    >
-                                        Calcola
-                                    </button>
+                                    <div className="flex gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const generatedCf = generateCodiceFiscale(tesserato);
+                                                if (generatedCf) {
+                                                    handleChange('codiceFiscale', generatedCf);
+                                                } else {
+                                                    alert("Impossibile calcolare il Codice Fiscale. Assicurati di aver inserito Nome, Cognome, Sesso, Data e Comune di Nascita.");
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors text-sm font-medium whitespace-nowrap"
+                                            title="Calcola Codice Fiscale dai dati anagrafici"
+                                        >
+                                            Calcola
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                if (!isCfValid || !tesserato.codiceFiscale) {
+                                                    alert("Inserisci un Codice Fiscale valido per estrarre i dati.");
+                                                    return;
+                                                }
+                                                setIsParsingCf(true);
+                                                try {
+                                                    const parsedData = await parseCodiceFiscale(tesserato.codiceFiscale);
+                                                    if (parsedData) {
+                                                        onBulkUpdate(index, parsedData);
+                                                    } else {
+                                                        alert("Impossibile estrarre i dati dal Codice Fiscale fornito.");
+                                                    }
+                                                } catch (error) {
+                                                    console.error("Failed to parse Codice Fiscale", error);
+                                                } finally {
+                                                    setIsParsingCf(false);
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors text-sm font-medium whitespace-nowrap"
+                                            title="Estrai Sesso, Data e Comune di Nascita dal Codice Fiscale"
+                                        >
+                                            Estrai Dati
+                                        </button>
+                                    </div>
                                 }
                             />
                             <Select 
