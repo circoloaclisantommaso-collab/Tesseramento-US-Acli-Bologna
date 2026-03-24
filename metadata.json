@@ -1,5 +1,5 @@
 {
   "name": "Tesseramento US Acli Bologna 2.0 (Beta)",
-  "description": "Un'applicazione web per acquisire i dati dei tesserati esportarli in formato CSV. Inserisci i dati, aggiungi più tesserati e genera il file CSV con un click.",
+  "description": "Questa applicazione ti permette di compilare, importare in maniera massiva i dati, gestire ed esportare i dati dei tesserati per l'US Acli Bologna in modo semplice e veloce. Tutti i dati rimangono al sicuro sul tuo computer.",
   "requestFramePermissions": []
 }
