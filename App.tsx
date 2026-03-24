@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Settings, BookOpen } from 'lucide-react';
+import { Settings, BookOpen, Download } from 'lucide-react';
 import { Tesserato, TesseratoField } from './types';
 import { DEFAULT_TESSERATO } from './constants';
 import { TesseratoForm } from './components/TesseratoForm';
@@ -246,8 +246,10 @@ function App() {
                         </button>
                         <button
                             onClick={handleExport}
-                            className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                            className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md hover:shadow-lg transform hover:-translate-y-0.5 flex items-center gap-2 border-2 border-black focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            title="Esporta i dati in un file CSV"
                         >
+                            <Download className="w-5 h-5" />
                             Esporta CSV
                         </button>
                          <button
