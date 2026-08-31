@@ -1,4 +1,5 @@
 import { Tesserato } from '../types';
+import { formatItalianDate } from './dateUtils';
 
 export const exportToCsv = (data: Tesserato[], filename: string) => {
     const headers = [
@@ -9,12 +10,6 @@ export const exportToCsv = (data: Tesserato[], filename: string) => {
         "Comune di residenza", "Marketing USAcli", "Marketing Partners USAcli",
         "Profilazione USAcli", "Profilazione Partners USAcli", "Disabilità"
     ];
-
-    const formatItalianDate = (isoDate: string) => {
-        if (!isoDate) return '';
-        const [year, month, day] = isoDate.split('-');
-        return `${day}/${month}/${year}`;
-    };
 
     const formatPrivacy = (value: boolean | null): string => {
         if (value === true) return 'S';

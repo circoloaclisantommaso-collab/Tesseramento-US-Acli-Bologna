@@ -5,6 +5,7 @@ import { Tesserato, ClasseTesseramento, TipoTesseramento, Sesso, Disabilita } fr
 import { DEFAULT_TESSERATO, getTodayDate } from '../constants';
 import { COMUNI_E_CAP } from '../comuniECap';
 import { parseCsv, parseXlsx } from './fileImporter';
+import { parseItalianDate } from './dateUtils';
 import { AISettings } from '../components/AISettingsModal';
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -231,7 +232,9 @@ export const importTesseratiWithAI = async (file: File, settings: AISettings): P
         return {
             ...DEFAULT_TESSERATO,
             ...data,
-            dataInizio: data.dataInizio || getTodayDate(),
+            dataInizio: parseItalianDate(data.dataInizio) || getTodayDate(),
+            dataFine: parseItalianDate(data.dataFine) || '',
+            dataNascita: parseItalianDate(data.dataNascita) || '',
             tipoTesseramento: Array.isArray(data.tipoTesseramento) ? data.tipoTesseramento : [],
             discipline: Array.isArray(data.discipline) ? data.discipline : [],
             disabilita: Array.isArray(data.disabilita) ? data.disabilita : [],

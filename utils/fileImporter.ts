@@ -1,6 +1,7 @@
 import { Tesserato, Sesso } from '../types';
 import { DEFAULT_TESSERATO, getTodayDate } from '../constants';
 import { COMUNI_E_CAP } from '../comuniECap';
+import { parseItalianDate } from './dateUtils';
 
 // These will be global variables from the script tags in index.html
 declare var Papa: any;
@@ -12,19 +13,25 @@ const HEADER_MAP: { [key: string]: keyof Tesserato } = {
     // Variations for 'classeTesseramento'
     'classe tesseramento': 'classeTesseramento',
     'classe': 'classeTesseramento',
+    'classe_tesseramento': 'classeTesseramento',
 
     // Variations for 'tipoTesseramento'
     'tipo tesseramento': 'tipoTesseramento',
     'tipo': 'tipoTesseramento',
+    'tipo_tesseramento': 'tipoTesseramento',
 
     // Variations for 'dataInizio'
     'data inizio': 'dataInizio',
     'inizio validità': 'dataInizio',
+    'data_inizio': 'dataInizio',
+    'inizio': 'dataInizio',
 
     // Variations for 'dataFine'
     'data fine': 'dataFine',
     'scadenza': 'dataFine',
     'fine validità': 'dataFine',
+    'data_fine': 'dataFine',
+    'fine': 'dataFine',
     
     // Variations for 'discipline'
     'discipline': 'discipline',
@@ -33,10 +40,15 @@ const HEADER_MAP: { [key: string]: keyof Tesserato } = {
     // Variations for 'nazioneCittadinanza'
     'nazione cittadinanza': 'nazioneCittadinanza',
     'cittadinanza': 'nazioneCittadinanza',
+    'nazione_cittadinanza': 'nazioneCittadinanza',
     
     // Variations for 'codiceFiscale'
     'codice fiscale': 'codiceFiscale',
+    'codice_fiscale': 'codiceFiscale',
     'cf': 'codiceFiscale',
+    'cod. fisc.': 'codiceFiscale',
+    'cod.fisc.': 'codiceFiscale',
+    'codice fisc': 'codiceFiscale',
     
     'cognome': 'cognome',
     'nome': 'nome',
@@ -44,40 +56,71 @@ const HEADER_MAP: { [key: string]: keyof Tesserato } = {
     // Variations for 'dataNascita'
     'data di nascita': 'dataNascita',
     'data nascita': 'dataNascita',
+    'data_nascita': 'dataNascita',
+    'data_di_nascita': 'dataNascita',
+    'datanascita': 'dataNascita',
     'nato il': 'dataNascita',
+    'nato/a il': 'dataNascita',
+    'data': 'dataNascita',
+    'dt nascita': 'dataNascita',
+    'dt. nascita': 'dataNascita',
+    'data nasc': 'dataNascita',
+    'data nasc.': 'dataNascita',
+    'birth date': 'dataNascita',
+    'birthdate': 'dataNascita',
+    'd.o.b.': 'dataNascita',
+    'dob': 'dataNascita',
 
     // Variations for 'sesso'
     'sesso': 'sesso',
     'genere': 'sesso',
+    'sex': 'sesso',
+    'gender': 'sesso',
     
     // Variations for 'nazioneNascita'
     'nazione nascita': 'nazioneNascita',
     'nazione di nascita': 'nazioneNascita',
+    'nazione_nascita': 'nazioneNascita',
+    'stato nascita': 'nazioneNascita',
+    'stato di nascita': 'nazioneNascita',
     
     // Variations for 'comuneNascita'
     'comune di nascita': 'comuneNascita',
     'comune nascita': 'comuneNascita',
+    'comune_nascita': 'comuneNascita',
     'luogo di nascita': 'comuneNascita',
     'luogo nascita': 'comuneNascita',
+    'luogo_nascita': 'comuneNascita',
 
     // Variations for 'indirizzoResidenza'
     'indirizzo residenza': 'indirizzoResidenza',
     'indirizzo': 'indirizzoResidenza',
+    'indirizzo_residenza': 'indirizzoResidenza',
+    'via': 'indirizzoResidenza',
 
     // Variations for 'capResidenza'
     'cap residenza': 'capResidenza',
     'cap': 'capResidenza',
+    'cap_residenza': 'capResidenza',
+    'c.a.p.': 'capResidenza',
     
     // Variations for 'comuneResidenza'
     'comune di residenza': 'comuneResidenza',
     'comune residenza': 'comuneResidenza',
+    'comune_residenza': 'comuneResidenza',
     'città residenza': 'comuneResidenza',
     'città': 'comuneResidenza',
+    'citta': 'comuneResidenza',
+    'citta residenza': 'comuneResidenza',
     
     'marketing usacli': 'marketingUsa',
+    'marketing usa': 'marketingUsa',
     'marketing partners usacli': 'marketingPartners',
+    'marketing partner': 'marketingPartners',
     'profilazione usacli': 'profilazioneUsa',
+    'profilazione usa': 'profilazioneUsa',
     'profilazione partners usacli': 'profilazionePartners',
+    'profilazione partner': 'profilazionePartners',
     
     // Variations for 'disabilita'
     'disabilità': 'disabilita',
@@ -98,29 +141,13 @@ COMUNI_E_CAP.forEach(comune => {
 
 const normalizeHeader = (header: string) => header.toLowerCase().trim();
 
-const parseItalianDate = (dateStr: string): string => {
-    if (!dateStr || typeof dateStr !== 'string') return '';
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-        const [day, month, year] = parts;
-        if (day?.length <= 2 && month?.length <= 2 && year?.length === 4) {
-             return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-        }
-    }
-    // Handle ISO format as well
-    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return dateStr;
-    }
-    return '';
-};
-
 // FIX: Made the function more robust to handle string representations of booleans like "TRUE" or "FALSE".
 // Changed parameter type to 'any' to robustly handle various input types from file parsers (e.g., number, string, boolean).
 const parsePrivacy = (value: any): boolean | null => {
     if (typeof value === 'boolean' || value === null) return value;
     const upperVal = String(value).trim().toUpperCase();
-    if (upperVal === 'S' || upperVal === 'TRUE') return true;
-    if (upperVal === 'N' || upperVal === 'FALSE') return false;
+    if (upperVal === 'S' || upperVal === 'TRUE' || upperVal === 'SI' || upperVal === 'SÌ' || upperVal === '1') return true;
+    if (upperVal === 'N' || upperVal === 'FALSE' || upperVal === 'NO' || upperVal === '0') return false;
     return null;
 };
 
@@ -150,17 +177,17 @@ const processRow = (rawRow: any, headerMapping: { [key: string]: keyof Tesserato
                     value = typeof value === 'string' ? value.split('|').map(s => s.trim()).filter(Boolean) : [];
                     break;
                 case 'codiceFiscale':
-                    value = typeof value === 'string' ? value.toUpperCase() : '';
+                    value = typeof value === 'string' ? value.toUpperCase().trim() : '';
                     break;
                 case 'sesso':
                      // FIX: Refactored sesso parsing to be more robust.
-                     const s = String(value ?? '').toUpperCase();
-                     value = s === 'M' ? Sesso.M : s === 'F' ? Sesso.F : '';
+                     const s = String(value ?? '').trim().toUpperCase();
+                     value = s === 'M' || s === 'MASCHIO' || s === 'MALE' ? Sesso.M : (s === 'F' || s === 'FEMMINA' || s === 'FEMALE' ? Sesso.F : '');
                      break;
                 default:
                     // FIX: Ensure all other fields are converted to string to avoid type mismatches
                     // when a cell contains a boolean or number by mistake.
-                    value = String(value ?? '');
+                    value = String(value ?? '').trim();
             }
             (tesserato as any)[tesseratoField] = value;
         }
@@ -193,7 +220,7 @@ export const parseXlsx = (file: File): Promise<any[]> => {
         reader.onload = (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array' });
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
                 const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });

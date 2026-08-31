@@ -1,4 +1,5 @@
 import React from 'react';
+import { parseItalianDate } from '../utils/dateUtils';
 
 interface BaseInputProps {
     label: string;
@@ -76,5 +77,6 @@ export const Select: React.FC<SelectProps> = ({ label, required, options, classN
 
 
 export const DateInput: React.FC<InputProps> = (props) => {
-    return <Input {...props} type="date" className={props.disabled ? `${props.className} disabled:bg-gray-100` : props.className} />;
-}
+    const normalizedValue = props.value ? parseItalianDate(props.value) : '';
+    return <Input {...props} value={normalizedValue} type="date" className={props.disabled ? `${props.className} disabled:bg-gray-100` : props.className} />;
+};

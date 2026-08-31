@@ -37,9 +37,10 @@ export const validateTesseratiForExport = (tesserati: Tesserato[]): ValidationEr
         if (!t.capResidenza?.trim()) missingFields.push('CAP di Residenza');
         if (!t.indirizzoResidenza?.trim()) missingFields.push('Indirizzo di Residenza');
         
-        if (t.consensoTrattamentoDati === null) missingFields.push('Consenso Trattamento Dati');
-        if (t.consensoRipreseAudioVideo === null) missingFields.push('Consenso Riprese Audio/Video');
-        if (t.consensoInvioComunicazioni === null) missingFields.push('Consenso Invio Comunicazioni');
+        if (t.marketingUsa === null) missingFields.push('Marketing USAcli');
+        if (t.marketingPartners === null) missingFields.push('Marketing Partners USAcli');
+        if (t.profilazioneUsa === null) missingFields.push('Profilazione USAcli');
+        if (t.profilazionePartners === null) missingFields.push('Profilazione Partners USAcli');
 
         if (missingFields.length > 0) {
             const name = t.nome || t.cognome ? `${t.nome} ${t.cognome}`.trim() : `Tesserato ${index + 1}`;
