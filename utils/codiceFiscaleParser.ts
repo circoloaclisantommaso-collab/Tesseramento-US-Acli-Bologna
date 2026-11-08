@@ -2,7 +2,9 @@ import { Sesso, Tesserato } from '../types';
 import CodiceFiscale from 'codice-fiscale-js';
 import { validateCodiceFiscale } from './validation';
 import { parseItalianDate } from './dateUtils';
-import { COMUNI_E_CAP } from '../comuniECap';
+import { COMUNI_E_CAP, getCapForComune, capToComuniMap } from '../comuniECap';
+import { normalizeCittadinanza } from './cittadinanzaUtils';
+import { Comune as CfComune } from 'codice-fiscale-js/src/comune.js';
 
 let COMUNI: { nome: string; codice: string }[] = [];
 let STATI_ESTERI: { nome: string; codice: string }[] = [];
@@ -21,7 +23,7 @@ async function loadLuoghiData() {
 }
 
 // Mappa omocodia (sostituzione di numeri con lettere secondo la normativa)
-const decodeOmocodia = (str: string): string => {
+export const decodeOmocodia = (str: string): string => {
     const omocodiaMap: { [key: string]: string } = {
         'L': '0', 'M': '1', 'N': '2', 'P': '3', 'Q': '4',
         'R': '5', 'S': '6', 'T': '7', 'U': '8', 'V': '9'
@@ -30,21 +32,18 @@ const decodeOmocodia = (str: string): string => {
 };
 
 function getLuogoNascita(codice: string): { comuneNascita: string; nazioneNascita: string } | null {
-    // 1. Prova con la libreria integrata codice-fiscale-js
+    // 1. Prova con la classe Comune di codice-fiscale-js (archivio completo con oltre 13.000 comuni italiani e stati esteri Z...)
     try {
-        const comuneFromLib = (CodiceFiscale as any).utils?.birthplaceFields ? null : null;
-        if ((CodiceFiscale as any).Comune?.GetByCC) {
-            const c = (CodiceFiscale as any).Comune.GetByCC(codice);
-            if (c && c.nome) {
-                const isForeign = codice.startsWith('Z');
-                return {
-                    comuneNascita: c.nome.toUpperCase(),
-                    nazioneNascita: isForeign ? c.nome.toUpperCase() : 'ITALIA'
-                };
-            }
+        const c = CfComune.GetByCC(codice);
+        if (c && c.nome) {
+            const isForeign = codice.startsWith('Z') || c.prov === 'EE';
+            return {
+                comuneNascita: c.nome.toUpperCase(),
+                nazioneNascita: isForeign ? c.nome.toUpperCase() : 'ITALIA'
+            };
         }
     } catch {
-        // ignora errore se libreria non ha il metodo
+        // prosegui con i fallback locali se non trovato
     }
 
     // 2. Prova con gli stati esteri o comuni in luoghiNascita
@@ -141,28 +140,76 @@ export const generateCodiceFiscale = (tesserato: Partial<Tesserato>): string | n
         const [year, month, day] = isoDate.split('-').map(Number);
         if (!year || !month || !day) return null;
 
-        const isForeign = tesserato.nazioneNascita && tesserato.nazioneNascita.toUpperCase() !== 'ITALIA';
-        const cf = new CodiceFiscale({
-            name: tesserato.nome.trim(),
-            surname: tesserato.cognome.trim(),
-            gender: tesserato.sesso,
-            day: day,
-            month: month,
-            year: year,
-            birthplace: isForeign ? tesserato.nazioneNascita : tesserato.comuneNascita.trim(),
-            birthplaceProvincia: isForeign ? 'EE' : undefined
-        });
+        const nazione = (tesserato.nazioneNascita || 'ITALIA').trim().toUpperCase();
+        const isForeign = nazione !== 'ITALIA';
+        const rawBirthplace = isForeign ? nazione : tesserato.comuneNascita.trim();
 
-        return cf.code ? cf.code.toUpperCase() : null;
+        // 1. Tentativo con il nome del luogo fornito
+        try {
+            const cf = new CodiceFiscale({
+                name: tesserato.nome.trim(),
+                surname: tesserato.cognome.trim(),
+                gender: tesserato.sesso,
+                day: day,
+                month: month,
+                year: year,
+                birthplace: rawBirthplace,
+                birthplaceProvincia: isForeign ? 'EE' : undefined
+            });
+
+            if ((cf as any).code) {
+                return (cf as any).code.toUpperCase();
+            }
+        } catch {
+            // Se fallisce, proviamo variazioni note (es. accenti apostrofati, alias comuni)
+        }
+
+        if (!isForeign) {
+            const variants = [
+                rawBirthplace.replace(/ì/gi, "i'").replace(/à/gi, "a'").replace(/è/gi, "e'").replace(/é/gi, "e'").replace(/ò/gi, "o'").replace(/ù/gi, "u'"),
+                rawBirthplace.replace(/i'/gi, "ì").replace(/a'/gi, "à").replace(/e'/gi, "è").replace(/o'/gi, "ò").replace(/u'/gi, "ù"),
+                rawBirthplace.toLowerCase().includes("reggio emilia") ? "Reggio nell'Emilia" : null,
+                rawBirthplace.toLowerCase().includes("forli") ? "Forli'" : null
+            ].filter((v): v is string => !!v && v !== rawBirthplace);
+
+            for (const variant of variants) {
+                try {
+                    const cfVar = new CodiceFiscale({
+                        name: tesserato.nome.trim(),
+                        surname: tesserato.cognome.trim(),
+                        gender: tesserato.sesso,
+                        day: day,
+                        month: month,
+                        year: year,
+                        birthplace: variant,
+                        birthplaceProvincia: undefined
+                    });
+                    if ((cfVar as any).code) {
+                        return (cfVar as any).code.toUpperCase();
+                    }
+                } catch {
+                    // prova prossima variante
+                }
+            }
+        }
+
+        return null;
     } catch (e) {
-        // In caso di errore di calcolo silente
         return null;
     }
 };
 
 export const enrichTesseratiData = async (tesserati: Tesserato[]): Promise<Tesserato[]> => {
+    await loadLuoghiData();
     return Promise.all(tesserati.map(async (t) => {
-        let updated = { ...t };
+        const updated = { ...t };
+
+        // Normalizzazione e pulizia stringhe iniziale
+        updated.nome = (updated.nome || '').trim();
+        updated.cognome = (updated.cognome || '').trim();
+        updated.codiceFiscale = (updated.codiceFiscale || '').trim().toUpperCase();
+        updated.comuneNascita = (updated.comuneNascita || '').trim();
+        updated.comuneResidenza = (updated.comuneResidenza || '').trim();
 
         // Normalizza tutte le date esistenti
         if (updated.dataNascita) {
@@ -175,35 +222,80 @@ export const enrichTesseratiData = async (tesserati: Tesserato[]): Promise<Tesse
             updated.dataFine = parseItalianDate(updated.dataFine);
         }
 
-        // 1. Estrai Dati: Se c'è un codice fiscale valido, estrai i dati
-        if (updated.codiceFiscale && validateCodiceFiscale(updated.codiceFiscale)) {
-            try {
-                const parsedData = await parseCodiceFiscale(updated.codiceFiscale);
-                if (parsedData) {
-                    // Imposta data nascita e sesso se estratti
-                    if (parsedData.dataNascita) {
-                        updated.dataNascita = parsedData.dataNascita;
+        // Default privacy and citizenship settings
+        if (updated.marketingUsa === null) updated.marketingUsa = true;
+        if (updated.marketingPartners === null) updated.marketingPartners = true;
+        if (updated.profilazioneUsa === null) updated.profilazioneUsa = true;
+        if (updated.profilazionePartners === null) updated.profilazionePartners = true;
+        
+        // Normalizza la cittadinanza: sempre nome dello Stato sovrano (es. ITALIA, MAROCCO, ROMANIA), mai derivazioni
+        updated.nazioneCittadinanza = normalizeCittadinanza(updated.nazioneCittadinanza);
+
+        // 1. Estrai Dati dal Codice Fiscale
+        if (updated.codiceFiscale && typeof updated.codiceFiscale === 'string') {
+            updated.codiceFiscale = updated.codiceFiscale.trim().toUpperCase();
+            if (validateCodiceFiscale(updated.codiceFiscale)) {
+                try {
+                    const parsedData = await parseCodiceFiscale(updated.codiceFiscale);
+                    if (parsedData) {
+                        // Imposta la data se vuota o se giorno e mese erano invertiti (formato MM/GG errato)
+                        if (parsedData.dataNascita) {
+                            if (!updated.dataNascita || updated.dataNascita === '') {
+                                updated.dataNascita = parsedData.dataNascita;
+                            } else {
+                                const cfParts = parsedData.dataNascita.split('-');
+                                const currParts = parseItalianDate(updated.dataNascita).split('-');
+                                if (cfParts.length === 3 && currParts.length === 3) {
+                                    // Se l'anno coincide e mese e giorno sono scambiati
+                                    if (currParts[0] === cfParts[0] && currParts[1] === cfParts[2] && currParts[2] === cfParts[1]) {
+                                        updated.dataNascita = parsedData.dataNascita;
+                                    }
+                                }
+                            }
+                        }
+                        if (parsedData.sesso && (!updated.sesso || (updated.sesso as string) === '')) {
+                            updated.sesso = parsedData.sesso as Sesso;
+                        }
+                        if (parsedData.comuneNascita && (!updated.comuneNascita || updated.comuneNascita === '')) {
+                            updated.comuneNascita = parsedData.comuneNascita.toUpperCase();
+                        }
+                        if (parsedData.nazioneNascita && (!updated.nazioneNascita || updated.nazioneNascita === '' || updated.nazioneNascita === 'ITALIA')) {
+                            updated.nazioneNascita = parsedData.nazioneNascita.toUpperCase();
+                        }
                     }
-                    if (parsedData.sesso) {
-                        updated.sesso = parsedData.sesso;
-                    }
-                    if (parsedData.comuneNascita && !updated.comuneNascita) {
-                        updated.comuneNascita = parsedData.comuneNascita;
-                    }
-                    if (parsedData.nazioneNascita && (!updated.nazioneNascita || updated.nazioneNascita === 'ITALIA')) {
-                        updated.nazioneNascita = parsedData.nazioneNascita;
-                    }
+                } catch (e) {
+                    console.error("Errore durante l'estrazione dei dati dal CF", e);
                 }
-            } catch (e) {
-                console.error("Errore durante l'estrazione dei dati dal CF", e);
             }
         }
 
-        // 2. Calcola: Se manca il CF ma abbiamo i dati anagrafici, calcoliamo il CF
-        if (!updated.codiceFiscale) {
-            const generatedCf = generateCodiceFiscale(updated);
+        // 2. Calcola Codice Fiscale se mancante ma abbiamo i dati necessari
+        if (!updated.codiceFiscale || !validateCodiceFiscale(updated.codiceFiscale)) {
+            const generatedCf = generateCodiceFiscale({
+                ...updated,
+                nome: (updated.nome || '').trim().toUpperCase(),
+                cognome: (updated.cognome || '').trim().toUpperCase(),
+                comuneNascita: (updated.comuneNascita || '').trim().toUpperCase(),
+                nazioneNascita: (updated.nazioneNascita || 'ITALIA').trim().toUpperCase()
+            });
             if (generatedCf) {
                 updated.codiceFiscale = generatedCf;
+            }
+        }
+
+        // 3. CAP di Residenza: Se c'è il comune di residenza ma manca il CAP di residenza, assegnalo in automatico
+        if (updated.comuneResidenza && (!updated.capResidenza || !updated.capResidenza.trim())) {
+            const autoCap = getCapForComune(updated.comuneResidenza);
+            if (autoCap) {
+                updated.capResidenza = autoCap;
+            }
+        }
+
+        // 4. Inverso: Se c'è il CAP ma manca il Comune (spesso capita in import)
+        if (updated.capResidenza && (!updated.comuneResidenza || !updated.comuneResidenza.trim())) {
+            const possibleComuni = capToComuniMap.get(updated.capResidenza);
+            if (possibleComuni && possibleComuni.length === 1) {
+                updated.comuneResidenza = possibleComuni[0];
             }
         }
 

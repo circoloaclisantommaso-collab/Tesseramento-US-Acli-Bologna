@@ -62,13 +62,13 @@ export const Select: React.FC<SelectProps> = ({ label, required, options, classN
                     if ('options' in opt) {
                         return (
                             <optgroup key={idx} label={opt.label}>
-                                {opt.options.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                {opt.options.map((o, oIdx) => (
+                                    <option key={`${o.value}-${oIdx}`} value={o.value}>{o.label}</option>
                                 ))}
                             </optgroup>
                         );
                     }
-                    return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+                    return <option key={`${opt.value}-${idx}`} value={opt.value}>{opt.label}</option>;
                 })}
             </select>
         </div>

@@ -1,7 +1,9 @@
 import { Tesserato, Sesso } from '../types';
 import { DEFAULT_TESSERATO, getTodayDate } from '../constants';
-import { COMUNI_E_CAP } from '../comuniECap';
+import { COMUNI_E_CAP, getCapForComune, capToComuniMap } from '../comuniECap';
 import { parseItalianDate } from './dateUtils';
+import { normalizeCittadinanza } from './cittadinanzaUtils';
+import { generateUniqueId } from './idUtils';
 
 // These will be global variables from the script tags in index.html
 declare var Papa: any;
@@ -128,17 +130,6 @@ const HEADER_MAP: { [key: string]: keyof Tesserato } = {
 };
 
 
-// Pre-compute map from CAP to comuni for efficient lookup
-const capToComuniMap = new Map<string, string[]>();
-COMUNI_E_CAP.forEach(comune => {
-    comune.cap.forEach(cap => {
-        if (!capToComuniMap.has(cap)) {
-            capToComuniMap.set(cap, []);
-        }
-        capToComuniMap.get(cap)!.push(comune.nome);
-    });
-});
-
 const normalizeHeader = (header: string) => header.toLowerCase().trim();
 
 // FIX: Made the function more robust to handle string representations of booleans like "TRUE" or "FALSE".
@@ -223,7 +214,7 @@ export const parseXlsx = (file: File): Promise<any[]> => {
                 const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                const json = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                const json = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: 'yyyy-mm-dd' });
                 resolve(json);
             } catch (err: any) {
                 reject(new Error('Errore durante la lettura del file Excel: ' + err.message));
@@ -277,16 +268,25 @@ export const importTesseratiFromFile = async (file: File): Promise<Tesserato[]> 
             let finalComune = comuneFromFile;
 
             if (capFromFile) {
-                // Priority to CAP: If a CAP exists in the file, use it to find the definitive comune.
-                const possibleComuni = capToComuniMap.get(capFromFile);
-                if (possibleComuni && possibleComuni.length === 1) {
-                    finalComune = possibleComuni[0];
+                // Priority to CAP: If a CAP exists in the file, use it to find the definitive comune if not set.
+                if (!finalComune) {
+                    const possibleComuni = capToComuniMap.get(capFromFile);
+                    if (possibleComuni && possibleComuni.length === 1) {
+                        finalComune = possibleComuni[0];
+                    }
                 }
             } else if (comuneFromFile) {
-                // No CAP in file: If a comune exists, use it to find the CAP.
-                const comuneData = COMUNI_E_CAP.find(c => c.nome.toUpperCase() === comuneFromFile.toUpperCase());
-                if (comuneData && comuneData.cap.length === 1) {
-                    finalCap = comuneData.cap[0];
+                // No CAP in file: If a comune exists, assign the CAP automatically.
+                const autoCap = getCapForComune(comuneFromFile);
+                if (autoCap) {
+                    finalCap = autoCap;
+                }
+            }
+
+            if (finalComune && !finalCap) {
+                const autoCap = getCapForComune(finalComune);
+                if (autoCap) {
+                    finalCap = autoCap;
                 }
             }
             
@@ -296,16 +296,8 @@ export const importTesseratiFromFile = async (file: File): Promise<Tesserato[]> 
                 dataInizio: processedData.dataInizio || getTodayDate(),
                 capResidenza: finalCap,
                 comuneResidenza: finalComune,
-                nazioneCittadinanza: processedData.nazioneCittadinanza || 'ITALIA',
-                // Default all privacy settings to true on import
-                marketingUsa: true,
-                marketingPartners: true,
-                profilazioneUsa: true,
-                profilazionePartners: true,
-                id: Date.now() + Math.random(),
-            // FIX: Cast the created object to Tesserato to satisfy the type predicate in the filter below.
-            // The created object is compatible with Tesserato, but its inferred type has a required `id`
-            // while `Tesserato` has an optional `id`, causing a type mismatch for the predicate.
+                nazioneCittadinanza: normalizeCittadinanza(processedData.nazioneCittadinanza || 'ITALIA'),
+                id: generateUniqueId(),
             } as Tesserato;
         })
         .filter((t): t is Tesserato => t !== null);

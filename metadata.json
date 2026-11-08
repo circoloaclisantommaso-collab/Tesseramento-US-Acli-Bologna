@@ -1,5 +1,8 @@
 {
   "name": "Tesseramento US Acli Bologna 2.0 (Beta)",
   "description": "Questa applicazione ti permette di compilare, importare in maniera massiva i dati, gestire ed esportare i dati dei tesserati per l'US Acli Bologna in modo semplice e veloce. Tutti i dati rimangono al sicuro sul tuo computer.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

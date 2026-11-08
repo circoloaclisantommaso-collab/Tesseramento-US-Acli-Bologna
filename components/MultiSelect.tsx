@@ -72,8 +72,8 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                     onClick={() => setIsOpen(!isOpen)}
                     className={`flex flex-wrap gap-2 p-2 min-h-[42px] border rounded-md shadow-sm bg-white cursor-text ${errorClasses}`}
                 >
-                    {selectedOptions.map(option => (
-                        <span key={option.value} className="flex items-center gap-1 bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">
+                    {selectedOptions.map((option, idx) => (
+                        <span key={`${option.value}-${idx}`} className="flex items-center gap-1 bg-green-100 text-green-800 text-sm font-medium px-2 py-1 rounded-full">
                             {option.label}
                             <button
                                 type="button"
@@ -103,9 +103,9 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                     <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                         <ul>
                             {filteredOptions.length > 0 ? (
-                                filteredOptions.map(option => (
+                                filteredOptions.map((option, idx) => (
                                     <li
-                                        key={option.value}
+                                        key={`${option.value}-${idx}`}
                                         onClick={() => handleSelect(option.value)}
                                         className={`p-2 cursor-pointer hover:bg-green-50 ${selectedValues.includes(option.value) ? 'bg-green-100' : ''}`}
                                     >

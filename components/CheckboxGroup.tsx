@@ -18,8 +18,8 @@ export function CheckboxGroup<T extends string>({ label, options, selectedValues
         <div>
             {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
             <div className={containerClasses}>
-                {options.map(option => (
-                    <label key={option.value} className="flex items-center cursor-pointer">
+                {options.map((option, idx) => (
+                    <label key={`${option.value}-${idx}`} className="flex items-center cursor-pointer">
                         <input
                             type="checkbox"
                             value={option.value}

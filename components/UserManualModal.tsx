@@ -61,7 +61,7 @@ export const UserManualModal: React.FC<UserManualModalProps> = ({ isOpen, onClos
                             <li className="flex gap-3">
                                 <div className="mt-1 bg-indigo-100 p-1.5 rounded text-indigo-600 flex-shrink-0"><Sparkles className="w-4 h-4" /></div>
                                 <div>
-                                    <strong>Importa con AI:</strong> Utilizza l'Intelligenza Artificiale per leggere e interpretare dati da file PDF, immagini o testo non formattato.
+                                    <strong>Importa con AI:</strong> Utilizza l'Intelligenza Artificiale per leggere e interpretare dati da file PDF, immagini o tabelle. Riconosce e converte automaticamente la cittadinanza nel nome ufficiale dello Stato sovrano (es. <em>ITALIA</em>, <em>ROMANIA</em>, <em>MAROCCO</em>), eliminando aggettivi o derivazioni.
                                 </div>
                             </li>
                             <li className="flex gap-3">

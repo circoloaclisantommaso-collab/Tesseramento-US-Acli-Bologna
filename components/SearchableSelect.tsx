@@ -114,9 +114,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                     <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                         <ul>
                             {filteredOptions.length > 0 ? (
-                                filteredOptions.map(option => (
+                                filteredOptions.map((option, idx) => (
                                     <li
-                                        key={option.value}
+                                        key={`${option.value}-${idx}`}
                                         onClick={() => handleSelect(option.value)}
                                         className={`p-2 cursor-pointer hover:bg-green-50 ${selectedValue === option.value ? 'bg-green-100' : ''}`}
                                     >

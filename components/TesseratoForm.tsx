@@ -16,7 +16,9 @@ import {
 import { DISCIPLINES } from '../discipline';
 import { validateCodiceFiscale } from '../utils/validation';
 import { parseCodiceFiscale, generateCodiceFiscale } from '../utils/codiceFiscaleParser';
-import { COMUNI_E_CAP } from '../comuniECap';
+import { COMUNI_E_CAP, getCapForComune } from '../comuniECap';
+import { normalizeCittadinanza } from '../utils/cittadinanzaUtils';
+import { parseItalianDate } from '../utils/dateUtils';
 
 
 interface TesseratoFormProps {
@@ -71,7 +73,19 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
         try {
             const parsedData = await parseCodiceFiscale(tesserato.codiceFiscale);
             if (parsedData) {
-                onBulkUpdate(index, parsedData);
+                const updates: Partial<Tesserato> = {};
+                if (parsedData.dataNascita && !tesserato.dataNascita) updates.dataNascita = parsedData.dataNascita;
+                if (parsedData.sesso && !tesserato.sesso) updates.sesso = parsedData.sesso;
+                // NON sovrascrivere o cancellare mai un comune di nascita già presente
+                if (parsedData.comuneNascita && !tesserato.comuneNascita?.trim()) {
+                    updates.comuneNascita = parsedData.comuneNascita.toUpperCase();
+                }
+                if (parsedData.nazioneNascita && (!tesserato.nazioneNascita || tesserato.nazioneNascita.toUpperCase() === 'ITALIA')) {
+                    updates.nazioneNascita = parsedData.nazioneNascita.toUpperCase();
+                }
+                if (Object.keys(updates).length > 0) {
+                    onBulkUpdate(index, updates);
+                }
             }
         } catch (error) {
             console.error("Failed to parse Codice Fiscale", error);
@@ -113,6 +127,16 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
         }
     }, [tesserato.comuneResidenza, tesserato.capResidenza, isComuneValid, isCapForComuneValid]);
 
+    // Assegna automaticamente il CAP se presente il comune di residenza ma manca il CAP
+    useEffect(() => {
+        if (tesserato.comuneResidenza && (!tesserato.capResidenza || !tesserato.capResidenza.trim())) {
+            const autoCap = getCapForComune(tesserato.comuneResidenza);
+            if (autoCap) {
+                onBulkUpdate(index, { capResidenza: autoCap });
+            }
+        }
+    }, [tesserato.comuneResidenza, tesserato.capResidenza, index, onBulkUpdate]);
+
     const handleManualResidenzaToggle = () => {
         const isTogglingToManual = !manualResidenza;
         setManualResidenza(isTogglingToManual);
@@ -123,9 +147,10 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
     };
 
     const handleComuneChange = (value: string) => {
+        const autoCap = getCapForComune(value);
         onBulkUpdate(index, {
             comuneResidenza: value,
-            capResidenza: ''
+            capResidenza: autoCap || ''
         });
     };
     
@@ -135,7 +160,77 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
     const manualComuneError = !tesserato.comuneResidenza ? 'Campo obbligatorio' : (!isComuneValid ? 'Comune non in lista. Verificare.' : undefined);
     const manualCapError = !tesserato.capResidenza ? 'Campo obbligatorio' : (!isCapForComuneValid ? 'CAP non valido per il comune.' : undefined);
 
-    // Logic for manual Tesseramento fields
+    // Automaticamente estrae i dati se il Codice Fiscale viene inserito/modificato ed è valido
+    useEffect(() => {
+        let isMounted = true;
+        const autoParseCf = async () => {
+            const cf = (tesserato.codiceFiscale || '').trim();
+            if (cf && validateCodiceFiscale(cf)) {
+                // Estraiamo i dati solo se i campi chiave sono effettivamente vuoti
+                if (!tesserato.dataNascita || !tesserato.sesso || !tesserato.comuneNascita) {
+                    try {
+                        const parsedData = await parseCodiceFiscale(cf);
+                        if (parsedData && isMounted) {
+                            const updates: Partial<Tesserato> = {};
+                            if (parsedData.dataNascita) {
+                                if (!tesserato.dataNascita) {
+                                    updates.dataNascita = parsedData.dataNascita;
+                                } else {
+                                    const cfParts = parsedData.dataNascita.split('-');
+                                    const currParts = parseItalianDate(tesserato.dataNascita).split('-');
+                                    if (cfParts.length === 3 && currParts.length === 3) {
+                                        if (currParts[0] === cfParts[0] && (currParts[1] !== cfParts[1] || currParts[2] !== cfParts[2])) {
+                                            updates.dataNascita = `${currParts[0]}-${cfParts[1]}-${cfParts[2]}`;
+                                        }
+                                    }
+                                }
+                            }
+                            if (parsedData.sesso && !tesserato.sesso) updates.sesso = parsedData.sesso;
+                            if (parsedData.comuneNascita && !tesserato.comuneNascita) updates.comuneNascita = parsedData.comuneNascita.toUpperCase();
+                            if (parsedData.nazioneNascita && (!tesserato.nazioneNascita || tesserato.nazioneNascita.toUpperCase() === 'ITALIA')) {
+                                updates.nazioneNascita = parsedData.nazioneNascita.toUpperCase();
+                            }
+                            
+                            if (Object.keys(updates).length > 0) {
+                                onBulkUpdate(index, updates);
+                            }
+                        }
+                    } catch (e) {
+                        // ignore
+                    }
+                }
+            }
+        };
+        autoParseCf();
+        return () => { isMounted = false; };
+    }, [tesserato.codiceFiscale, tesserato.dataNascita, tesserato.sesso, tesserato.comuneNascita, tesserato.nazioneNascita, index, onBulkUpdate]);
+
+    // Effetto separato per calcolare il CF quando i dati anagrafici cambiano
+    useEffect(() => {
+        // Calcola il CF solo se i campi minimi sono presenti e il CF attuale è vuoto o invalido
+        const { nome, cognome, sesso, dataNascita, comuneNascita, nazioneNascita } = tesserato;
+        const nazione = (nazioneNascita || 'ITALIA').trim().toUpperCase();
+        const isForeign = nazione !== 'ITALIA';
+        const hasBirthPlace = isForeign ? !!nazione : !!comuneNascita;
+
+        if (nome && cognome && sesso && dataNascita && hasBirthPlace) {
+            const trimmedCf = (tesserato.codiceFiscale || '').trim().toUpperCase();
+            if (!trimmedCf || !validateCodiceFiscale(trimmedCf)) {
+                const generated = generateCodiceFiscale({
+                    ...tesserato,
+                    nome: nome.trim().toUpperCase(),
+                    cognome: cognome.trim().toUpperCase(),
+                    sesso,
+                    dataNascita,
+                    comuneNascita: (comuneNascita || '').trim().toUpperCase(),
+                    nazioneNascita: nazione
+                });
+                if (generated && generated !== trimmedCf) {
+                    onBulkUpdate(index, { codiceFiscale: generated });
+                }
+            }
+        }
+    }, [tesserato.nome, tesserato.cognome, tesserato.sesso, tesserato.dataNascita, tesserato.comuneNascita, tesserato.nazioneNascita, index, onBulkUpdate]);
     const isClasseInList = useMemo(() => {
         return CLASSE_TESSERAMENTO_OPTIONS.some(group => {
             if ('options' in group) {
@@ -176,16 +271,6 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
         setManualTipoTesseramento(isTogglingToManual);
         handleChange('tipoTesseramento', []);
     };
-
-    // Auto-generate Codice Fiscale
-    useEffect(() => {
-        if (!tesserato.codiceFiscale && tesserato.nome && tesserato.cognome && tesserato.sesso && tesserato.dataNascita && tesserato.comuneNascita) {
-            const generatedCf = generateCodiceFiscale(tesserato);
-            if (generatedCf) {
-                handleChange('codiceFiscale', generatedCf);
-            }
-        }
-    }, [tesserato.nome, tesserato.cognome, tesserato.sesso, tesserato.dataNascita, tesserato.comuneNascita, tesserato.nazioneNascita, tesserato.codiceFiscale]);
 
 
     return (
@@ -339,6 +424,10 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                     <div className="flex gap-1">
                                         <button
                                             type="button"
+                                            onMouseDown={(e) => {
+                                                // Previene la perdita di focus dall'input prima del calcolo
+                                                e.preventDefault();
+                                            }}
                                             onClick={() => {
                                                 const generatedCf = generateCodiceFiscale(tesserato);
                                                 if (generatedCf) {
@@ -363,7 +452,14 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                                 try {
                                                     const parsedData = await parseCodiceFiscale(tesserato.codiceFiscale);
                                                     if (parsedData) {
-                                                        onBulkUpdate(index, parsedData);
+                                                        const updates: Partial<Tesserato> = {};
+                                                        if (parsedData.dataNascita) updates.dataNascita = parsedData.dataNascita;
+                                                        if (parsedData.sesso) updates.sesso = parsedData.sesso;
+                                                        if (parsedData.comuneNascita) updates.comuneNascita = parsedData.comuneNascita.toUpperCase();
+                                                        if (parsedData.nazioneNascita) updates.nazioneNascita = parsedData.nazioneNascita.toUpperCase();
+                                                        if (Object.keys(updates).length > 0) {
+                                                            onBulkUpdate(index, updates);
+                                                        }
                                                     } else {
                                                         alert("Impossibile estrarre i dati dal Codice Fiscale fornito.");
                                                     }
@@ -405,7 +501,18 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                 value={tesserato.nazioneNascita} 
                                 onChange={e => handleChange('nazioneNascita', e.target.value)} 
                             />
-                            <Input label="Nazione Cittadinanza" value={tesserato.nazioneCittadinanza} onChange={e => handleChange('nazioneCittadinanza', e.target.value)} />
+                            <Input 
+                                label="Nazione Cittadinanza" 
+                                value={tesserato.nazioneCittadinanza} 
+                                placeholder="Es. ITALIA, ROMANIA, MAROCCO"
+                                onChange={e => handleChange('nazioneCittadinanza', e.target.value)} 
+                                onBlur={() => {
+                                    if (tesserato.nazioneCittadinanza) {
+                                        handleChange('nazioneCittadinanza', normalizeCittadinanza(tesserato.nazioneCittadinanza));
+                                    }
+                                }}
+                                info="Indicare sempre lo Stato sovrano (es. ITALIA, MAROCCO), non la derivazione o aggettivo"
+                            />
                         </div>
                     </Section>
                      <Section title="Disabilità">
@@ -439,7 +546,18 @@ export const TesseratoForm: React.FC<TesseratoFormProps> = ({ tesserato, index, 
                                     <Input
                                         label="Comune di Residenza"
                                         value={tesserato.comuneResidenza}
-                                        onChange={e => handleChange('comuneResidenza', e.target.value)}
+                                        onChange={e => {
+                                            const newComune = e.target.value;
+                                            const autoCap = (!tesserato.capResidenza || !tesserato.capResidenza.trim()) ? getCapForComune(newComune) : '';
+                                            if (autoCap) {
+                                                onBulkUpdate(index, {
+                                                    comuneResidenza: newComune,
+                                                    capResidenza: autoCap
+                                                });
+                                            } else {
+                                                handleChange('comuneResidenza', newComune);
+                                            }
+                                        }}
                                         placeholder="Es. Roma"
                                         required
                                         error={manualComuneError}

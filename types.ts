@@ -83,7 +83,7 @@ export enum Disabilita {
 }
 
 export interface Tesserato {
-    id?: number;
+    id?: string | number;
     classeTesseramento: ClasseTesseramento | '';
     tipoTesseramento: TipoTesseramento[];
     dataInizio: string;
